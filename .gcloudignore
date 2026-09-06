@@ -1,0 +1,16 @@
+# Mirrors .dockerignore: these must never be uploaded to Cloud Build.
+.env
+.env.*
+service-account.json
+*-service-account*.json
+serviceAccountKey*.json
+
+.git
+.gitignore
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+.pytest_cache/
+.idea/
+.vscode/

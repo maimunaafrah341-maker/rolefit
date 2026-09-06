@@ -1,0 +1,23 @@
+# Secrets - these MUST never be committed
+.env
+.env.*
+!.env.example
+service-account.json
+*-service-account*.json
+serviceAccountKey*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+venv/
+.venv/
+env/
+
+# Tooling / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log

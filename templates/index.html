@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RoleFit — Turn job descriptions into an honest, actionable application plan</title>
+  <meta name="description" content="RoleFit analyses your resume against a job description and returns proof-backed strengths, honest gaps, a 7-day action plan, and interview prep. It helps you prepare — it does not predict hiring outcomes." />
+  <meta name="color-scheme" content="light dark" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%234f46e5'/><text y='71' x='50' text-anchor='middle' font-size='58' font-family='system-ui' font-weight='bold' fill='white'>R</text></svg>" />
+
+  <script>
+    // Applied before first paint so a dark-mode user never sees a white flash.
+    (function () {
+      try {
+        var saved = localStorage.getItem("rolefit-theme");
+        var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        document.documentElement.dataset.theme = saved || (prefersDark ? "dark" : "light");
+      } catch (e) { /* private mode: fall through to the light default */ }
+    })();
+  </script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">R</div>
+      <div style="min-width:0">
+        <div class="brand-name">RoleFit</div>
+      </div>
+      <span class="brand-tag">Turn job descriptions into an honest, actionable application plan</span>
+    </div>
+
+    <button id="theme-toggle" class="btn btn-icon btn-ghost" title="Toggle light / dark theme" aria-label="Toggle light or dark theme">
+      <span id="theme-icon" aria-hidden="true">◐</span>
+    </button>
+
+    <div id="auth-slot" class="row" style="gap:.5rem">
+      <button id="signin-btn" class="btn btn-primary hidden">
+        <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
+          <path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.05 6.05 29.3 4 24 4 12.95 4 4 12.95 4 24s8.95 20 20 20 20-8.95 20-20c0-1.3-.14-2.65-.4-3.9z"/>
+          <path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.65 15.1 18.95 12 24 12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.05 6.05 29.3 4 24 4 16.3 4 9.65 8.35 6.3 14.7z"/>
+          <path fill="#4CAF50" d="M24 44c5.2 0 9.85-1.95 13.4-5.2l-6.2-5.25C29.15 35.1 26.7 36 24 36c-5.25 0-9.7-3.3-11.3-8l-6.55 5.05C9.5 39.55 16.2 44 24 44z"/>
+          <path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.75 2.15-2.15 4-3.9 5.35l6.2 5.25C37.2 39.2 44 34 44 24c0-1.3-.14-2.65-.4-3.9z"/>
+        </svg>
+        Sign in with Google
+      </button>
+
+      <div id="user-chip" class="user-chip hidden">
+        <span class="email" id="user-email"></span>
+        <span class="avatar" id="user-avatar" aria-hidden="true"></span>
+      </div>
+      <button id="signout-btn" class="btn btn-sm btn-ghost hidden">Sign out</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- ==================== BOOT / CONFIG FAILURE ==================== -->
+  <section id="view-boot" class="wrap">
+    <div class="loading-panel">
+      <div class="pulse-dot"></div>
+      <p class="muted">Starting RoleFit…</p>
+    </div>
+  </section>
+
+  <section id="view-config-error" class="wrap hidden">
+    <div class="card card-lg" style="max-width:620px;margin:3rem auto">
+      <div class="alert alert-error">
+        <div>
+          <strong>RoleFit is not configured yet</strong>
+          <span id="config-error-detail"></span>
+        </div>
+      </div>
+      <p class="faint" style="margin-top:1rem">
+        Set the <code>FIREBASE_*</code> and <code>GEMINI_API_KEY</code> environment variables,
+        then restart the server. See the README for the full setup checklist.
+      </p>
+    </div>
+  </section>
+
+  <!-- ==================== LANDING (signed out) ==================== -->
+  <section id="view-landing" class="wrap hidden">
+    <div class="hero">
+      <span class="eyebrow">● Honest AI career copilot</span>
+      <h1>Turn job descriptions into an <span class="gradient">honest, actionable</span> application plan</h1>
+      <p class="lede">
+        Paste your resume and a job description. RoleFit shows you exactly which of your
+        real experiences match each requirement, where the genuine gaps are, and what to
+        do about them this week — with the receipts.
+      </p>
+      <button id="signin-hero" class="btn btn-primary btn-lg">Sign in with Google to start</button>
+      <p class="faint" style="margin-top:.9rem">Free · Your data stays in your own private account</p>
+    </div>
+
+    <div class="feature-grid">
+      <div class="card feature">
+        <span class="fi" aria-hidden="true">🔍</span>
+        <h3>Proof-backed fit</h3>
+        <p>Every matched skill quotes the exact line from your resume that proves it. Quotes are verified against your real text — nothing is invented.</p>
+      </div>
+      <div class="card feature">
+        <span class="fi" aria-hidden="true">🛡️</span>
+        <h3>Truth guard</h3>
+        <p>Flags the claims this job description tempts you to make that your resume does not support — and gives you an honest alternative instead.</p>
+      </div>
+      <div class="card feature">
+        <span class="fi" aria-hidden="true">🗓️</span>
+        <h3>7-day gap plan</h3>
+        <p>Critical gaps become a realistic week of work, each day ending in something real you could genuinely put on your resume.</p>
+      </div>
+      <div class="card feature">
+        <span class="fi" aria-hidden="true">✍️</span>
+        <h3>Before / after rewrites</h3>
+        <p>Targeted bullet rewrites using only facts already in your resume, each mapped to the requirement it answers.</p>
+      </div>
+      <div class="card feature">
+        <span class="fi" aria-hidden="true">🎤</span>
+        <h3>Grounded interview prep</h3>
+        <p>Five likely questions with talking points built strictly from your own experience — no scripts for things you have not done.</p>
+      </div>
+      <div class="card feature">
+        <span class="fi" aria-hidden="true">📊</span>
+        <h3>Track every application</h3>
+        <p>Compare roles side by side, and follow each one from Saved through Applied, Interview and beyond.</p>
+      </div>
+    </div>
+
+    <p class="disclaimer">
+      <strong>What RoleFit is not.</strong> It does not predict whether you will be hired,
+      interviewed, or rejected, and it will never help you fabricate experience.
+      It measures how well-prepared your application is and shows you how to improve it honestly.
+    </p>
+  </section>
+
+  <!-- ==================== APP (signed in) ==================== -->
+  <section id="view-app" class="wrap hidden">
+    <div class="tabs" role="tablist" aria-label="Sections">
+      <button class="tab" role="tab" data-tab="analyze" aria-selected="true">New analysis</button>
+      <button class="tab" role="tab" data-tab="result" aria-selected="false">Result</button>
+      <button class="tab" role="tab" data-tab="history" aria-selected="false">
+        History <span class="count" id="history-count">0</span>
+      </button>
+      <button class="tab" role="tab" data-tab="compare" aria-selected="false">Compare roles</button>
+      <button class="tab" role="tab" data-tab="privacy" aria-selected="false">Privacy</button>
+    </div>
+
+    <!-- ---------- Analyze ---------- -->
+    <div id="panel-analyze" class="tabpanel" role="tabpanel">
+      <div class="sample-bar">
+        <div>
+          <strong>First time here?</strong>
+          <span class="muted">Load a complete sample application and see every feature run on real text.</span>
+        </div>
+        <button type="button" id="load-sample" class="btn btn-sm">Try a sample</button>
+      </div>
+
+      <form id="analyze-form" class="stack" novalidate>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h3>Your resume</h3>
+                <div class="sub">Paste the text, or upload a PDF and we will extract it.</div>
+              </div>
+            </div>
+            <div class="stack" style="gap:.7rem">
+              <div class="dropzone" id="dropzone" tabindex="0" role="button"
+                   aria-label="Upload a PDF resume">
+                <span id="dropzone-text">📄 Drop a PDF here or click to upload · max 5 MB</span>
+                <input type="file" id="resume-file" accept="application/pdf,.pdf" class="sr-only" />
+              </div>
+              <div class="field">
+                <label for="resume-text" class="sr-only">Resume text</label>
+                <textarea id="resume-text" name="resume_text" required
+                  placeholder="Paste your full resume text here — experience, projects, skills, education."></textarea>
+                <div class="counter" id="resume-counter">0 characters</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h3>The job</h3>
+                <div class="sub">The full posting works best — requirements, responsibilities, and nice-to-haves.</div>
+              </div>
+            </div>
+            <div class="stack" style="gap:.7rem">
+              <div class="row" style="gap:.7rem;flex-wrap:nowrap">
+                <div class="field" style="flex:1;min-width:0">
+                  <label for="company">Company</label>
+                  <input type="text" id="company" name="company" placeholder="e.g. Stripe" maxlength="200" />
+                </div>
+                <div class="field" style="flex:1;min-width:0">
+                  <label for="role">Role</label>
+                  <input type="text" id="role" name="role" placeholder="e.g. Backend Engineering Intern" maxlength="200" />
+                </div>
+              </div>
+              <div class="field">
+                <label for="jd-text">Job description</label>
+                <textarea id="jd-text" name="jd_text" required style="min-height:150px"
+                  placeholder="Paste the full job description here."></textarea>
+                <div class="counter" id="jd-counter">0 characters</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="analyze-error" class="alert alert-error hidden" role="alert"></div>
+
+        <div class="row" style="justify-content:space-between">
+          <p class="faint" style="max-width:60ch;margin:0">
+            Analysed only for your account. RoleFit assesses application readiness — it does not predict hiring outcomes.
+          </p>
+          <button type="submit" id="analyze-btn" class="btn btn-primary btn-lg">Analyse application</button>
+        </div>
+      </form>
+
+      <div id="analyze-loading" class="card card-lg hidden" style="margin-top:1.1rem">
+        <div class="loading-panel">
+          <div class="pulse-dot"></div>
+          <h3>Reading your application…</h3>
+          <div class="loading-steps" id="loading-steps"></div>
+          <p class="faint">This usually takes 15–30 seconds. Two AI passes run in parallel.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---------- Result ---------- -->
+    <div id="panel-result" class="tabpanel hidden" role="tabpanel">
+      <div id="result-empty" class="card empty">
+        <div class="empty-icon" aria-hidden="true">📋</div>
+        <h3>No analysis open</h3>
+        <p>Run a new analysis, or reopen one from your history.</p>
+      </div>
+      <div id="result-body" class="stack hidden"></div>
+    </div>
+
+    <!-- ---------- History ---------- -->
+    <div id="panel-history" class="tabpanel hidden" role="tabpanel">
+      <div class="card-head">
+        <div>
+          <h2>Your applications</h2>
+          <div class="sub">Reopen any past analysis, update its status, or delete it permanently.</div>
+        </div>
+        <button id="refresh-history" class="btn btn-sm spacer-end">Refresh</button>
+      </div>
+      <div id="history-body" class="stack"></div>
+    </div>
+
+    <!-- ---------- Compare ---------- -->
+    <div id="panel-compare" class="tabpanel hidden" role="tabpanel">
+      <div class="card-head">
+        <div>
+          <h2>Compare roles</h2>
+          <div class="sub">Select 2–3 saved applications to see where your limited time pays off most.</div>
+        </div>
+        <button id="compare-btn" class="btn btn-primary spacer-end" disabled>Compare selected</button>
+      </div>
+      <div id="compare-picker" class="stack"></div>
+      <div id="compare-result" class="stack" style="margin-top:1.2rem"></div>
+    </div>
+
+    <!-- ---------- Privacy ---------- -->
+    <div id="panel-privacy" class="tabpanel hidden" role="tabpanel">
+      <div class="card card-lg" style="max-width:760px">
+        <h2>Privacy by design</h2>
+        <p class="muted" style="margin-top:.5rem">
+          Your resume is one of the most personal documents you own. Here is exactly what happens to it.
+        </p>
+        <div class="stack" style="margin-top:1.3rem">
+          <div class="alert alert-info">
+            <div>
+              <strong>Only you can read your data</strong>
+              Every analysis is stored under your own user ID. Requests are authorised with a
+              Firebase ID token verified on the server for every single API call, and Firestore
+              security rules independently block any client from reading another user's records.
+            </div>
+          </div>
+          <div class="alert">
+            <div>
+              <strong>What we store</strong>
+              The resume text and job description you submit, plus the resulting analysis. We keep
+              the source text so you can reopen and compare past applications. Nothing is used to
+              train any model, and nothing is shared with employers or third parties.
+            </div>
+          </div>
+          <div class="alert">
+            <div>
+              <strong>Deletion is real deletion</strong>
+              The Delete button on any analysis permanently removes that document — resume text,
+              job description and results — from the database. It is not archived or soft-deleted.
+            </div>
+          </div>
+          <div class="alert">
+            <div>
+              <strong>Honest by construction</strong>
+              RoleFit assesses how well-prepared an application is. It does not predict hiring
+              outcomes, does not score you as a person, and will not help anyone claim experience
+              they do not have.
+            </div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:1.4rem">
+          <button id="delete-all-btn" class="btn btn-danger">Delete all my analyses</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    RoleFit · Helps you prepare, not predict. Built with Flask, Firebase, Firestore, Gemini and Cloud Run.
+  </div>
+</footer>
+
+<div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+<div id="modal-root"></div>
+
+<script type="module" src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

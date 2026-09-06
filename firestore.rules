@@ -1,0 +1,47 @@
+rules_version = '2';
+
+// RoleFit Firestore security rules.
+//
+// Threat model: the browser holds a Firebase ID token scoped to one user. It
+// never holds privileged credentials. Every write in this product goes through
+// the Flask backend using the Admin SDK, which bypasses these rules by design.
+//
+// That means client WRITE access buys us nothing and costs us an attack
+// surface, so it is denied outright. A compromised or malicious client cannot
+// forge a fit score, tamper with stored evidence, or write to another user's
+// collection even if it obtains a valid token for its own account.
+//
+// Client READ access to own documents is allowed, so the front end can be
+// moved to direct Firestore reads or real-time listeners later without a rules
+// migration.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(userId) {
+      return request.auth != null
+             && request.auth.uid == userId
+             && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if false;   // server-side only
+
+      match /analyses/{analysisId} {
+        allow read: if isOwner(userId);
+        allow write: if false; // created, updated and deleted by the backend only
+      }
+
+      // Any future subcollection is denied until it is explicitly modelled here.
+      match /{document=**} {
+        allow read, write: if false;
+      }
+    }
+
+    // Default deny for every other path in the database.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

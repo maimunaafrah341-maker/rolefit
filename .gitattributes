@@ -1,0 +1,9 @@
+# Normalise to LF in the repository so the Cloud Run image builds identically
+# whether it is checked out on Windows, macOS or Linux.
+* text=auto eol=lf
+
+# Binary formats must never be line-ending converted.
+*.png binary
+*.jpg binary
+*.pdf binary
+*.ico binary

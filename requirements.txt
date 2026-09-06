@@ -1,0 +1,9 @@
+# Pinned so the image that works today still builds on demo day.
+Flask==3.0.3
+gunicorn==23.0.0
+firebase-admin==6.5.0
+google-cloud-firestore==2.19.0
+google-genai==1.2.0
+pydantic==2.9.2
+python-dotenv==1.0.1
+pypdf==5.1.0
