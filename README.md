@@ -15,7 +15,10 @@ the posting tempts you to make that your resume does not support.
 
 ## Demo
 
+**🚀 Live app: <https://rolefit-wo3mn26o2a-el.a.run.app>**  
 **▶ [Watch the 90-second walkthrough](https://youtu.be/WF76T85K0C8)**
+
+Running on Cloud Run in `asia-south1`, scaled to zero when idle, so the first request after a quiet period takes a few seconds to wake.
 
 ### 1. Landing
 
@@ -341,7 +344,8 @@ verified caller's own data.
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/` | Dashboard |
-| `GET` | `/healthz` | Liveness probe, no dependencies |
+| `GET` | `/healthz` | Liveness probe, no dependencies (local) |
+| `GET` | `/api/health` | Same probe. Use this against a deployed service - Google's frontend intercepts `/healthz` on `*.run.app` and returns its own 404 before the request reaches the container. |
 | `GET` | `/api/config` | Public Firebase web config + input limits |
 | `POST` | `/api/extract-resume` | `[auth]` multipart PDF → text |
 | `POST` | `/api/analyze` | `[auth]` stage one: resume + JD → assessment, saved |

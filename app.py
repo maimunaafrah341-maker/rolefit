@@ -3,7 +3,8 @@
 Route map
 ---------
 GET    /                      dashboard shell (auth handled client-side)
-GET    /healthz               dependency-free liveness probe
+GET    /healthz               dependency-free liveness probe (local)
+GET    /api/health            same probe; use this one on *.run.app
 GET    /api/config            public Firebase web config (no secrets)
 POST   /api/extract-resume    PDF  -> plain text                    [auth]
 POST   /api/analyze           resume + JD -> assessment, saved      [auth]
@@ -126,10 +127,17 @@ def index():
 
 
 @app.route("/healthz")
+@app.route("/api/health")
 def healthz():
     """No dependencies on purpose: confirms the container is serving even when
     Firestore or Gemini are misconfigured, which is what makes a bad deploy
-    diagnosable rather than just 'down'."""
+    diagnosable rather than just 'down'.
+
+    Exposed at two paths because Google's frontend intercepts /healthz on a
+    *.run.app domain and answers it with its own 404 before the request ever
+    reaches the container. /api/health is never intercepted, so it is the one
+    to use against a deployed service; /healthz still works everywhere else.
+    """
     return jsonify({"status": "ok"}), 200
 
 

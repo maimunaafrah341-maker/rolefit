@@ -155,7 +155,7 @@ ONE STEP LEFT - sign-in will fail until you do this:
   4. Save, then hard-refresh the site (Ctrl+Shift+R)
 
 Health check (should print ok):
-  curl $URL/healthz
+  curl $URL/api/health
 
 Cost guards applied: max-instances 3, min-instances 0 (scales to zero
 when idle, so an unused service costs nothing).
