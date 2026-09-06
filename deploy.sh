@@ -28,6 +28,11 @@ fi
 # values but not the secret. Prompt for it rather than having the user paste a
 # key onto a command line, where it would land in shell history.
 prompt_for_key() {
+  # Vertex mode authenticates with the service identity, so there is no key
+  # to ask for.
+  if grep -qiE '^GEMINI_USE_VERTEX=(1|true|yes)' .env; then
+    return
+  fi
   if grep -qE '^GEMINI_API_KEY=.+' .env; then
     return
   fi
@@ -72,6 +77,11 @@ fi
 # key file that is not in the image would break startup.
 # PORT is excluded too - Cloud Run injects it.
 WANTED=(
+  GEMINI_USE_VERTEX
+  GOOGLE_CLOUD_PROJECT
+  VERTEX_LOCATION
+  VERTEX_MODEL
+  VERTEX_FALLBACK_MODELS
   GEMINI_API_KEY
   GEMINI_MODEL
   GEMINI_FALLBACK_MODELS
@@ -84,7 +94,13 @@ WANTED=(
 )
 
 missing=()
-for key in GEMINI_API_KEY FIREBASE_API_KEY FIREBASE_AUTH_DOMAIN FIREBASE_PROJECT_ID; do
+REQUIRED=(FIREBASE_API_KEY FIREBASE_AUTH_DOMAIN FIREBASE_PROJECT_ID)
+# In Vertex mode credentials come from the service identity, so no key needed.
+case "${ENVMAP[GEMINI_USE_VERTEX]:-}" in
+  1|true|True|TRUE|yes|Yes) ;;
+  *) REQUIRED+=(GEMINI_API_KEY) ;;
+esac
+for key in "${REQUIRED[@]}"; do
   [ -z "${ENVMAP[$key]:-}" ] && missing+=("$key")
 done
 if [ ${#missing[@]} -gt 0 ]; then

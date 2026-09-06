@@ -132,6 +132,25 @@ Staging also makes the plan better, not just faster: the second call receives th
 first call actually found and ranked, so the week is built around named weaknesses rather
 than re-derived from the raw documents, and cannot contradict the assessment on screen.
 
+### Two ways to reach Gemini
+
+`GEMINI_USE_VERTEX=true` routes through **Vertex AI**, which authenticates with
+Application Default Credentials - on Cloud Run, the service's own identity.
+That means the deployment carries **no API key at all**: nothing secret to leak
+or rotate, no separate prepaid balance to run dry mid-demo, and usage bills to
+the same Google Cloud project as everything else. It needs
+`aiplatform.googleapis.com` enabled and `roles/aiplatform.user` on the runtime
+service account.
+
+Leaving it `false` uses the Gemini Developer API with an `AIza...` key, which is
+simpler for local development.
+
+The model chain differs per transport because Vertex and the Developer API
+publish different model identifiers. Measured on this project, Vertex:
+`gemini-3.5-flash` ~22s, `gemini-2.5-flash-lite` ~8s, `gemini-3-flash-preview`
+~18s - so the fallback order degrades into the *fastest* option rather than the
+slowest.
+
 ### Three layers of output safety
 
 1. `response_schema` constrains generation at the API level.

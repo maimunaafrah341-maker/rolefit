@@ -44,20 +44,46 @@ class AnalysisError(RuntimeError):
 
 def get_client() -> genai.Client:
     """Lazy singleton so an unconfigured key does not break app startup - the
-    landing page and /healthz must still work for a diagnosable deploy."""
+    landing page and health probe must still work for a diagnosable deploy.
+
+    Two transports, chosen by config:
+
+    * Vertex AI - authenticates with Application Default Credentials, which on
+      Cloud Run means the service's own identity. No API key exists to leak,
+      rotate, or run out of prepaid credit, and usage bills to the project that
+      is already set up. This is the production path.
+    * Gemini Developer API - a plain API key. Convenient locally, but the key
+      carries quota and billing entirely separate from the Cloud project.
+    """
     global _client
     if _client is None:
-        if not config.GEMINI_API_KEY:
-            raise AnalysisError(
-                "The analysis service is not configured on this server "
-                "(missing API key). Contact the administrator."
-            )
-        _client = genai.Client(
-            api_key=config.GEMINI_API_KEY,
-            http_options=genai_types.HttpOptions(
-                timeout=config.GEMINI_TIMEOUT_S * 1000  # SDK expects milliseconds
-            ),
+        timeout = genai_types.HttpOptions(
+            timeout=config.GEMINI_TIMEOUT_S * 1000  # SDK expects milliseconds
         )
+        if config.GEMINI_USE_VERTEX:
+            if not config.GOOGLE_CLOUD_PROJECT:
+                raise AnalysisError(
+                    "The analysis service is misconfigured on this server "
+                    "(Vertex mode is on but no project is set)."
+                )
+            logger.info(
+                "Gemini transport: Vertex AI (project=%s location=%s)",
+                config.GOOGLE_CLOUD_PROJECT, config.VERTEX_LOCATION,
+            )
+            _client = genai.Client(
+                vertexai=True,
+                project=config.GOOGLE_CLOUD_PROJECT,
+                location=config.VERTEX_LOCATION,
+                http_options=timeout,
+            )
+        else:
+            if not config.GEMINI_API_KEY:
+                raise AnalysisError(
+                    "The analysis service is not configured on this server "
+                    "(missing API key). Contact the administrator."
+                )
+            logger.info("Gemini transport: Developer API (api key)")
+            _client = genai.Client(api_key=config.GEMINI_API_KEY, http_options=timeout)
     return _client
 
 
@@ -121,9 +147,18 @@ TARGET COMPANY: {company}
 
 
 def _model_chain() -> list:
-    """Primary model first, then fallbacks, de-duplicated."""
-    chain = [config.GEMINI_MODEL]
-    for name in config.GEMINI_FALLBACK_MODELS:
+    """Primary model first, then fallbacks, de-duplicated.
+
+    Vertex AI and the Developer API publish different model identifiers, so the
+    chain follows whichever transport is active.
+    """
+    if config.GEMINI_USE_VERTEX:
+        primary, fallbacks = config.VERTEX_MODEL, config.VERTEX_FALLBACK_MODELS
+    else:
+        primary, fallbacks = config.GEMINI_MODEL, config.GEMINI_FALLBACK_MODELS
+
+    chain = [primary]
+    for name in fallbacks:
         if name not in chain:
             chain.append(name)
     return chain[:3]  # bound worst-case latency
@@ -141,7 +176,8 @@ def _is_unavailable(exc: Exception) -> bool:
     return any(
         marker in text
         for marker in ("503", "unavailable", "429", "resource_exhausted",
-                       "rate limit", "404", "not_found", "no longer available")
+                       "rate limit", "quota", "credits are depleted",
+                       "404", "not_found", "no longer available")
     )
 
 
