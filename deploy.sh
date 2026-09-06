@@ -24,6 +24,30 @@ if [ ! -f .env ]; then
   exit 1
 fi
 
+# In Cloud Shell the repo is a fresh clone, so .env carries the public Firebase
+# values but not the secret. Prompt for it rather than having the user paste a
+# key onto a command line, where it would land in shell history.
+prompt_for_key() {
+  if grep -qE '^GEMINI_API_KEY=.+' .env; then
+    return
+  fi
+  echo "GEMINI_API_KEY is empty in .env."
+  echo "Paste it now (input is hidden, and is written only to .env):"
+  read -rs typed_key
+  echo
+  if [ -z "$typed_key" ]; then
+    echo "ERROR: no key entered." >&2
+    exit 1
+  fi
+  # Replace the empty line in place.
+  grep -v '^GEMINI_API_KEY=' .env > .env.tmp
+  echo "GEMINI_API_KEY=${typed_key}" >> .env.tmp
+  mv .env.tmp .env
+  echo "Key saved to .env (gitignored)."
+  echo
+}
+prompt_for_key
+
 # --- Load .env, skipping comments and blanks -------------------------------
 declare -A ENVMAP
 while IFS= read -r line || [ -n "$line" ]; do
