@@ -21,3 +21,14 @@ Thumbs.db
 .idea/
 .vscode/
 *.log
+
+# Local recordings - linked from YouTube instead. Git keeps binaries forever,
+# so a 40 MB video would bloat every future clone permanently.
+*.mp4
+*.mov
+*.mkv
+*.webm
+Screenshot*.png
+
+# OneDrive folder metadata
+desktop.ini

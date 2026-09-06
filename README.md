@@ -13,8 +13,40 @@ the posting tempts you to make that your resume does not support.
 
 ---
 
+## Demo
+
+**▶ [Watch the 90-second walkthrough](https://youtu.be/WF76T85K0C8)**
+
+### 1. Landing
+
+Signed out. The tagline states the promise, and the page is explicit that this
+tool helps you prepare rather than predicting whether you get hired.
+
+![RoleFit landing page](docs/01-landing.png)
+
+### 2. Analyse
+
+Resume and job description side by side, with live character counters and an
+optional PDF upload. **Try a sample** loads a complete application so the whole
+pipeline can be demonstrated on real text in one click.
+
+![Analysis form with the sample application loaded](docs/02-analysis-form.png)
+
+### 3. Result
+
+An honest readiness score with the reasoning spelled out - note that it names
+the specific preferred requirements holding the score down rather than just
+producing a number. The badge reads **5/5 quotes verified against your resume**:
+every matched skill cited a verbatim line, and the server re-checked all five
+against the original text.
+
+![Result card showing a readiness score of 80 with 5 of 5 quotes verified](docs/03-result-score.png)
+
+---
+
 ## Contents
 
+- [Demo](#demo)
 - [What it does](#what-it-does)
 - [Architecture](#architecture)
 - [Local setup](#local-setup)
