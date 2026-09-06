@@ -257,6 +257,24 @@ gcloud run deploy rolefit \
 **After the first deploy**, copy the `https://rolefit-….run.app` URL into
 **Firebase → Authentication → Settings → Authorized domains**, or sign-in will fail.
 
+### One-command deploy
+
+`deploy.sh` reads `.env`, builds the env-var flags and deploys. No secret is
+typed into a terminal or left in shell history, and the script itself contains
+no credentials.
+
+```bash
+bash deploy.sh
+```
+
+It enables the required APIs, deploys with `--max-instances 3` and
+`--min-instances 0` (scales to zero when idle, so an unused service is free),
+then prints the URL and the exact domain to add to Firebase Authorized domains.
+
+`GOOGLE_APPLICATION_CREDENTIALS` is deliberately excluded from the deployed
+environment: Cloud Run supplies credentials through the service identity, and
+pointing at a key file that is not in the image would break startup.
+
 ### Better: keep the key in Secret Manager
 
 ```bash
