@@ -217,7 +217,8 @@ Verify in the **Rules Playground**: a `get` on
 | Variable | Required | Secret | Notes |
 |---|---|---|---|
 | `GEMINI_API_KEY` | yes | **yes** | Google AI Studio key. Server-side only. |
-| `GEMINI_MODEL` | no | no | Default `gemini-2.5-flash`. |
+| `GEMINI_MODEL` | no | no | Default `gemini-3.7-flash`. |
+| `GEMINI_FALLBACK_MODELS` | no | no | Comma-separated. Tried in order when the primary returns 503/404. Default `gemini-3.6-flash,gemini-3.5-flash`. |
 | `FIREBASE_API_KEY` | yes | no | Public web SDK config. |
 | `FIREBASE_AUTH_DOMAIN` | yes | no | e.g. `your-project.firebaseapp.com` |
 | `FIREBASE_PROJECT_ID` | yes | no | |
@@ -411,7 +412,7 @@ scaling to a whole campus is a deploy, not a fundraise.
 | `auth/unauthorized-domain` on sign-in | Add the domain under **Firebase → Authentication → Settings → Authorized domains**. |
 | "A project ID is required to access the auth service" | `GOOGLE_APPLICATION_CREDENTIALS` is unset or points at a missing file. Locally, download `service-account.json`. |
 | Plan card shows an error but the score is fine | Stage two failed on its own; the assessment is already saved. Click **Retry the plan**. |
-| Analysis returns 502 | Check `GEMINI_API_KEY`, quota, and that `GEMINI_MODEL` still exists in AI Studio. Server logs carry the real reason. |
+| Analysis returns 502 | Every model in the chain failed. Check `GEMINI_API_KEY` and quota; server logs name the real reason. If a model was retired, update `GEMINI_MODEL` / `GEMINI_FALLBACK_MODELS`. |
 | History returns 503 | The runtime service account lacks `roles/datastore.user`, or Firestore was never created. |
 | Popup blocked | Sign-in must be triggered by a real click — don't script it. |
 | PDF extracts nothing | It's a scan or image export. Paste the text instead; the message says so. |

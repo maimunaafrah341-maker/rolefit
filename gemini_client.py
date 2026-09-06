@@ -120,8 +120,38 @@ TARGET COMPANY: {company}
 # ---------------------------------------------------------------------------
 
 
+def _model_chain() -> list:
+    """Primary model first, then fallbacks, de-duplicated."""
+    chain = [config.GEMINI_MODEL]
+    for name in config.GEMINI_FALLBACK_MODELS:
+        if name not in chain:
+            chain.append(name)
+    return chain[:3]  # bound worst-case latency
+
+
+def _is_unavailable(exc: Exception) -> bool:
+    """True for errors where a DIFFERENT model is the right next move.
+
+    503 (high demand) and 429 (rate limited) are capacity problems with this
+    particular model. 404 means the model is retired or not available to this
+    key - Google rotates flash models often enough that this is a real case.
+    Retrying the same model does not help for any of them.
+    """
+    text = str(exc).lower()
+    return any(
+        marker in text
+        for marker in ("503", "unavailable", "429", "resource_exhausted",
+                       "rate limit", "404", "not_found", "no longer available")
+    )
+
+
 def _generate(prompt: str, schema: Type[TModel], label: str) -> TModel:
-    """One schema-constrained generation with a single retry.
+    """One schema-constrained generation, resilient to a flaky model endpoint.
+
+    Strategy: try the primary model twice (a truncated decode is usually fixed
+    by asking again), then fall through to each fallback model once. A capacity
+    or retirement error skips the wasted second attempt and moves on
+    immediately.
 
     Raises AnalysisError with a message that is safe to show to a user.
     """
@@ -134,46 +164,68 @@ def _generate(prompt: str, schema: Type[TModel], label: str) -> TModel:
     }
 
     last_error: Exception | None = None
-    for attempt in (1, 2):
-        try:
-            request_prompt = prompt
-            if attempt == 2:
-                request_prompt = (
-                    prompt
-                    + "\n\nIMPORTANT: Return ONLY valid JSON matching the required "
-                    "schema exactly. Keep every field concise so the response is "
-                    "complete and not truncated."
+    chain = _model_chain()
+
+    for model_index, model in enumerate(chain):
+        # Only the primary model earns a second attempt; fallbacks get one each
+        # so a bad run cannot stack up to a minute of dead air.
+        attempts = 2 if model_index == 0 else 1
+
+        for attempt in range(1, attempts + 1):
+            try:
+                request_prompt = prompt
+                if attempt == 2:
+                    request_prompt = (
+                        prompt
+                        + "\n\nIMPORTANT: Return ONLY valid JSON matching the required "
+                        "schema exactly. Keep every field concise so the response is "
+                        "complete and not truncated."
+                    )
+
+                response = client.models.generate_content(
+                    model=model,
+                    contents=request_prompt,
+                    config=generation_config,
                 )
 
-            response = client.models.generate_content(
-                model=config.GEMINI_MODEL,
-                contents=request_prompt,
-                config=generation_config,
-            )
+                text = getattr(response, "text", None)
+                if not text:
+                    # Empty text means a safety block or an exhausted token
+                    # budget; surface the reason rather than a parse error.
+                    reason = _blocked_reason(response)
+                    raise AnalysisError(
+                        "The AI could not analyse this content"
+                        + (" (" + reason + ")." if reason else ".")
+                        + " Try removing unusual formatting or shortening the text."
+                    )
 
-            text = getattr(response, "text", None)
-            if not text:
-                # Empty text means a safety block or an exhausted token budget;
-                # surface the reason rather than a confusing parse error.
-                reason = _blocked_reason(response)
-                raise AnalysisError(
-                    "The AI could not analyse this content"
-                    + (" (" + reason + ")." if reason else ".")
-                    + " Try removing unusual formatting or shortening the text."
+                result = schema.model_validate_json(text)
+                if model_index > 0:
+                    logger.info(
+                        "%s: served by fallback model %s (primary %s was unavailable)",
+                        label, model, config.GEMINI_MODEL,
+                    )
+                return result
+
+            except AnalysisError:
+                raise
+            except PydanticValidationError as exc:
+                last_error = exc
+                logger.warning(
+                    "%s: schema validation failed on %s attempt %s", label, model, attempt
                 )
+            except Exception as exc:  # noqa: BLE001 - network/quota/SDK failures
+                last_error = exc
+                logger.warning(
+                    "%s: %s failed on attempt %s: %s", label, model, attempt, exc
+                )
+                if _is_unavailable(exc):
+                    # Capacity or retirement - a retry on this model is wasted.
+                    break
 
-            return schema.model_validate_json(text)
-
-        except AnalysisError:
-            raise
-        except PydanticValidationError as exc:
-            last_error = exc
-            logger.warning("%s: schema validation failed on attempt %s", label, attempt)
-        except Exception as exc:  # noqa: BLE001 - network/quota/SDK failures
-            last_error = exc
-            logger.warning("%s: generation failed on attempt %s: %s", label, attempt, exc)
-
-    logger.error("%s: giving up after 2 attempts: %s", label, last_error)
+    logger.error(
+        "%s: every model in %s failed. Last error: %s", label, chain, last_error
+    )
     raise AnalysisError(
         "The AI returned an unusable response for the " + label + " step. "
         "This is usually temporary - please try again."

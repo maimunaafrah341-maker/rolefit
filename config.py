@@ -26,8 +26,21 @@ FLASK_DEBUG = os.environ.get("FLASK_DEBUG", "").lower() in {"1", "true", "yes"}
 
 # --- Gemini ---------------------------------------------------------------
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.7-flash")
 GEMINI_TIMEOUT_S = _int_env("GEMINI_TIMEOUT_S", 90)
+
+# Fallback chain. Flash models return a transient 503 ("experiencing high
+# demand") often enough that a single-model client fails a live demo roughly
+# one run in three. If the primary is unavailable we transparently try the
+# next one rather than showing the user an error. Order is fastest first.
+# Override with a comma-separated list if a model is retired.
+GEMINI_FALLBACK_MODELS = [
+    name.strip()
+    for name in os.environ.get(
+        "GEMINI_FALLBACK_MODELS", "gemini-3.6-flash,gemini-3.5-flash"
+    ).split(",")
+    if name.strip()
+]
 
 # --- Firebase web SDK config (public) ------------------------------------
 FIREBASE_WEB_CONFIG = {

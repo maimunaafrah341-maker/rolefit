@@ -188,7 +188,9 @@ class FakeModels:
             if behaviour == "empty":
                 return FakeResponse(None)
             if behaviour == "boom":
-                raise RuntimeError("simulated 503 from the model endpoint")
+                raise RuntimeError("503 UNAVAILABLE: model is experiencing high demand")
+            if behaviour == "not_found":
+                raise RuntimeError("404 NOT_FOUND: this model is no longer available")
 
         schema = config.get("response_schema")
         if schema is schemas.CoreAnalysis:
@@ -208,6 +210,9 @@ class FakeGenaiClient:
 
 
 FAKE_GENAI = FakeGenaiClient()
+# Primary model gets 2 attempts, then each fallback gets 1. Scripting this
+# many failures is what it now takes to exhaust the whole chain.
+EXHAUST_CHAIN = 2 + len(config.GEMINI_FALLBACK_MODELS[:2])
 gemini_client._client = FAKE_GENAI
 
 
@@ -653,8 +658,52 @@ def retry_on_bad_json():
 check("malformed model output triggers one retry and succeeds", retry_on_bad_json)
 
 
+def fallback_rescues_a_dead_primary():
+    """A 503 on the primary must transparently fall through to the next model.
+
+    This is the demo-day failure we actually measured: flash models return
+    "experiencing high demand" roughly one run in three.
+    """
+    FAKE_GENAI.calls.clear()
+    # Two 503s exhaust the primary's attempts; the fallback then succeeds.
+    FAKE_GENAI.script = ["boom", "boom"]
+    res = http.post("/api/analyze", headers=H, json={
+        "resume_text": SAMPLE_RESUME, "jd_text": SAMPLE_JD,
+        "company": "Fallback Co", "role": "Test Role"})
+    assert res.status_code == 200, f"fallback did not rescue: {res.get_json()}"
+    assert res.get_json()["result"]["fit_score"] == 68
+
+    models_tried = [c["model"] for c in FAKE_GENAI.calls]
+    assert models_tried[0] == config.GEMINI_MODEL, models_tried
+    assert models_tried[-1] != config.GEMINI_MODEL, "never left the primary model"
+    assert models_tried[-1] in config.GEMINI_FALLBACK_MODELS, models_tried
+    http.delete(f"/api/analyses/{res.get_json()['id']}", headers=H)
+    return f"primary failed, rescued by {models_tried[-1]}"
+
+
+check("a 503 on the primary model falls back to the next", fallback_rescues_a_dead_primary)
+
+
+def retired_model_skips_wasted_retry():
+    """A 404 means the model is gone; do not burn a second attempt on it."""
+    FAKE_GENAI.calls.clear()
+    FAKE_GENAI.script = ["not_found"]
+    res = http.post("/api/analyze", headers=H, json={
+        "resume_text": SAMPLE_RESUME, "jd_text": SAMPLE_JD,
+        "company": "Retired Co", "role": "Test Role"})
+    assert res.status_code == 200, res.get_json()
+    models_tried = [c["model"] for c in FAKE_GENAI.calls]
+    assert models_tried.count(config.GEMINI_MODEL) == 1, \
+        f"retried a retired model instead of moving on: {models_tried}"
+    http.delete(f"/api/analyses/{res.get_json()['id']}", headers=H)
+    return f"404 -> moved straight to {models_tried[-1]}"
+
+
+check("a retired (404) model is abandoned immediately", retired_model_skips_wasted_retry)
+
+
 def give_up_cleanly():
-    FAKE_GENAI.script = ["bad_json", "bad_json"]
+    FAKE_GENAI.script = ["bad_json"] * EXHAUST_CHAIN
     res = http.post("/api/analyze", headers=H, json={
         "resume_text": SAMPLE_RESUME, "jd_text": SAMPLE_JD, "company": "X", "role": "Y"})
     assert res.status_code == 502, res.status_code
@@ -669,7 +718,7 @@ check("two bad responses give up with a clean 502, no stack trace", give_up_clea
 
 
 def safety_block():
-    FAKE_GENAI.script = ["empty", "empty"]
+    FAKE_GENAI.script = ["empty"] * EXHAUST_CHAIN
     res = http.post("/api/analyze", headers=H, json={
         "resume_text": SAMPLE_RESUME, "jd_text": SAMPLE_JD, "company": "X", "role": "Y"})
     assert res.status_code == 502
@@ -681,7 +730,7 @@ check("blocked or empty model response is handled", safety_block)
 
 
 def transport_failure():
-    FAKE_GENAI.script = ["boom", "boom"]
+    FAKE_GENAI.script = ["boom"] * EXHAUST_CHAIN
     res = http.post("/api/analyze", headers=H, json={
         "resume_text": SAMPLE_RESUME, "jd_text": SAMPLE_JD, "company": "X", "role": "Y"})
     assert res.status_code == 502
@@ -700,7 +749,7 @@ def plan_failure_keeps_assessment():
         "company": "Partial Co", "role": "Partial Role"})
     pid = made.get_json()["id"]
 
-    FAKE_GENAI.script = ["boom", "boom"]
+    FAKE_GENAI.script = ["boom"] * EXHAUST_CHAIN
     plan_res = http.post(f"/api/analyses/{pid}/plan", headers=H)
     assert plan_res.status_code == 502
 
