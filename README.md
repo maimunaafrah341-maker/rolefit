@@ -16,7 +16,7 @@ the posting tempts you to make that your resume does not support.
 ## Demo
 
 **🚀 Live app: <https://rolefit-wo3mn26o2a-el.a.run.app>**  
-**▶ [Watch the 90-second walkthrough](https://youtu.be/WF76T85K0C8)**
+[![RoleFit Demo](https://img.youtube.com/vi/1SK-zzRmKfw/maxresdefault.jpg)](https://youtu.be/1SK-zzRmKfw)
 
 Running on Cloud Run in `asia-south1`, scaled to zero when idle, so the first request after a quiet period takes a few seconds to wake.
 
